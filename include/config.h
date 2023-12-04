@@ -29,3 +29,14 @@
 
 #define OPEN true
 #define CLOSED false
+
+//////////////////////////////
+/// Double Reset Detector ///
+//////////////////////////////
+
+// Number of seconds after reset during which a
+// subseqent reset will be considered a double reset.
+#define DRD_TIMEOUT 10
+
+// RTC Memory Address for the DoubleResetDetector to use
+#define DRD_ADDRESS 0
