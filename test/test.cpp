@@ -15,8 +15,7 @@
 ESP32Time rtc(3600);  // offset in seconds GMT+1
 
 ESPAsync_WiFiManager_Lite* ESPAsync_WiFiManager;
-
-//AsyncWebServer server(81);
+AsyncWebServer server(81);
 
 WiFiUDP ntpUDP;
 NTPClient timeClient(ntpUDP);
@@ -52,7 +51,7 @@ void setup()
   Serial.print(F(" on "));
   Serial.println(ARDUINO_BOARD);
   Serial.println(ESP_ASYNC_WIFI_MANAGER_LITE_VERSION);
-  //Serial.println(ESP_MULTI_RESET_DETECTOR_VERSION);
+  Serial.println(ESP_MULTI_RESET_DETECTOR_VERSION);
 
   ESPAsync_WiFiManager = new ESPAsync_WiFiManager_Lite();
   String AP_SSID = "EGGPortal";
@@ -78,33 +77,28 @@ void setup()
 
 
   setupPins();
-  //ElegantOTA.begin(&server);    // Start ElegantOTA
-  //server.begin();
+  ElegantOTA.begin(&server);    // Start ElegantOTA
+  server.begin();
 }
 
 
 
 void loop()
 {
-  //Serial.println(rtc.getTime("%A, %B %d %Y %H:%M:%S"));   // (String) returns time with specified format 
+  Serial.println(rtc.getTime("%A, %B %d %Y %H:%M:%S"));   // (String) returns time with specified format 
 //TODO: calculate sunrise and sunset 
 //TODO: update time
   ESPAsync_WiFiManager->run();
   check_status();
 
   displayCredentialsInLoop();
-  if (!ESPAsync_WiFiManager->isConfigMode())
-    ElegantOTA.loop();  
-
+  ElegantOTA.loop();
 }
 
 
 void update_time()
 {  
-  if (WiFi.status() != WL_CONNECTED) {
-    Serial.print("Wifi not connected! Can't update time.");        // H means connected to WiFi
-    return;
-  }
+  //TODO: check if wifi is connected
   Serial.println("Updating time...");
   timeClient.update(); // get time from ntp
   Serial.println(timeClient.getFormattedTime());
@@ -116,28 +110,28 @@ void update_time()
 void setupPins() {
   pinMode(STEP_PIN, OUTPUT);
   pinMode(DIR_PIN, OUTPUT);
-  pinMode(ENABLE_PIN, OUTPUT);
+  pinMode(enablePin, OUTPUT);
   pinMode(resetButtonPin, INPUT);
   pinMode(neoPixelPin, OUTPUT);
 
   digitalWrite(STEP_PIN, LOW);
   digitalWrite(DIR_PIN, LOW);
-  digitalWrite(ENABLE_PIN, HIGH);
+  digitalWrite(enablePin, HIGH);
   digitalWrite(neoPixelPin, LOW);
 }
 
 void setDoor(bool setState) {
   if (setState == state) return;
 
-  digitalWrite(DIR_PIN, STEPPER_REVERSED ? !setState : setState);
-  digitalWrite(ENABLE_PIN, STEPPER_ENABLED);
-  for (int i = 0; i < STEPS_PER_MM * distance; i++) {
+  digitalWrite(DIR_PIN, REVERSED ? !setState : setState);
+  digitalWrite(enablePin, ENABLED);
+  for (int i = 0; i < stepsPerMillimeter * distance; i++) {
     digitalWrite(STEP_PIN, HIGH);
     delayMicroseconds(1000);
     digitalWrite(STEP_PIN, LOW);
     delayMicroseconds(1000);
   }
-  digitalWrite(ENABLE_PIN, STEPPER_DISABLED);
+  digitalWrite(enablePin, DISABLED);
   state = setState;
 }
 

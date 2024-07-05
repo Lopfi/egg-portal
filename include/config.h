@@ -2,18 +2,18 @@
 // Stepper motor configuration
 
 /* PINS */
-#define stepPin 2
-#define dirPin 3
-#define enablePin 4
+#define STEP_PIN 2
+#define DIR_PIN 3
+#define ENABLE_PIN 4
 
-#define microstepping 1
-#define stepsPerRevolution 200
-#define distancePerRevolution 200
+#define MICROSTEPPING 1
+#define STEPS_PER_REV 200
+#define DIST_PER_REV 200
 
-#define stepsPerMillimeter (stepsPerRevolution * microstepping / distancePerRevolution)
-#define REVERSED false
-#define ENABLED false
-#define DISABLED true
+#define STEPS_PER_MM (STEPS_PER_REV * MICROSTEPPING / DIST_PER_REV)
+#define STEPPER_REVERSED false
+#define STEPPER_ENABLED false
+#define STEPPER_DISABLED true
 
 /* RESET BUTTON */
 #define resetButtonPin 5
@@ -40,3 +40,10 @@
 
 // RTC Memory Address for the DoubleResetDetector to use
 #define DRD_ADDRESS 0
+
+// To not display stored SSIDs and PWDs on Config Portal, select false. Default is true
+// Even the stored Credentials are not display, just leave them all blank to reconnect and reuse the stored Credentials 
+//#define DISPLAY_STORED_CREDENTIALS_IN_CP        false
+
+// Use from 0 to 4. Higher number, more debugging messages and memory usage.
+#define _ESPASYNC_WIFIMGR_LOGLEVEL_    4
