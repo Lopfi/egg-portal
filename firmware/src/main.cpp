@@ -1,129 +1,120 @@
-#include "defines.h"
-#include "Credentials.h"
-#include "dynamicParams.h"
-#include "config.h"
 #include <Arduino.h>
-#include <ESPAsyncWebServer.h>
-#include <ElegantOTA.h>
-#include <NTPClient.h>
-#include <WiFiUdp.h>
-#include <ESP32Time.h>
+#include <FastLED.h>
+#include <sunset.h>
+#include <TimeLib.h>
+#include <TinyGPSPlus.h>
+#include <EEPROM.h>
 
-//ESP32Time rtc;
-//TODO: set offset acording to timezone
-//TODO: make timezone configurable in web interface or config file
-ESP32Time rtc(3600);  // offset in seconds GMT+1
+#include "config.h"
 
-ESPAsync_WiFiManager_Lite* ESPAsync_WiFiManager;
-
-//AsyncWebServer server(81);
-
-WiFiUDP ntpUDP;
-NTPClient timeClient(ntpUDP);
+SunSet sun;
+CRGB leds[PIXEL_COUNT];
+TinyGPSPlus gps;
 
 int distance = 20; // opening distance in mm
-bool state = OPEN; // current door state
+bool state; // current door state
 
 void setupPins();
 void setDoor(bool setState);
-
-void displayCredentials();
-void displayCredentialsInLoop();
-void heartBeatPrint();
-void check_status();
-void update_time();
-
-#if USING_CUSTOMS_STYLE
-const char NewCustomsStyle[] PROGMEM =
-  "<style>div,input{padding:5px;font-size:1em;}input{width:95%;}body{text-align: center;}"\
-  "button{background-color:blue;color:white;line-height:2.4rem;font-size:1.2rem;width:100%;}fieldset{border-radius:0.3rem;margin:0px;}</style>";
-#endif
+void updateTime();
+void digitalClockDisplay();
+void printDigits(int digits);
+void displayInfo();
 
 void setup()
 {
+  // Fast LED
+  FastLED.addLeds<NEOPIXEL, LED_PIN>(leds, PIXEL_COUNT);
+  FastLED.setBrightness(5);
+  leds[0] = BOOTING;
+  FastLED.show();
+
   // Debug console
   Serial.begin(115200);
+  Serial1.begin(9600, SERIAL_8N1, RXD2, TXD2);
   while (!Serial);
-
   delay(200);
-
-  Serial.print(F("\nStarting ESPAsync_WiFi using "));
-  Serial.print(FS_Name);
-  Serial.print(F(" on "));
-  Serial.println(ARDUINO_BOARD);
-  Serial.println(ESP_ASYNC_WIFI_MANAGER_LITE_VERSION);
-  //Serial.println(ESP_MULTI_RESET_DETECTOR_VERSION);
-
-  ESPAsync_WiFiManager = new ESPAsync_WiFiManager_Lite();
-  String AP_SSID = "EGGPortal";
-  String AP_PWD  = "chickenchicken";
+  Serial.println("Starting up...");
+  EEPROM.begin(EEPROM_SIZE);
   
-  // Set customized AP SSID and PWD
-  ESPAsync_WiFiManager->setConfigPortal(AP_SSID, AP_PWD);
+  state = EEPROM.read(0);
 
-  // Optional to change default AP IP(192.168.4.1) and channel(10)
-  //ESPAsync_WiFiManager->setConfigPortalIP(IPAddress(192, 168, 120, 1));
-  ESPAsync_WiFiManager->setConfigPortalChannel(0);
-
-#if USING_CUSTOMS_STYLE
-  ESPAsync_WiFiManager->setCustomsStyle(NewCustomsStyle);
-#endif
-
-#if USING_CUSTOMS_HEAD_ELEMENT
-  ESPAsync_WiFiManager->setCustomsHeadElement(PSTR("<style>html{filter: invert(10%);}</style>"));
-#endif
-
-  // Set customized DHCP HostName
-  ESPAsync_WiFiManager->begin(HOST_NAME);
-
+  Serial.print("Door state: ");
+  Serial.println(state ? "OPEN" : "CLOSED");
 
   setupPins();
-  //ElegantOTA.begin(&server);    // Start ElegantOTA
-  //server.begin();
+
+  do {
+    Serial.println("Waiting for GPS signal...");
+    if (Serial1.available()) {
+      if (gps.encode(Serial1.read())) { // process gps messages
+        leds[0] = SUCCESS;
+        FastLED.show();
+        // when TinyGPS reports new data...
+        if (gps.date.isValid() && gps.time.isValid() && gps.location.isValid() && gps.time.age() <500)
+        {
+          // set the Time to the latest GPS reading
+          setTime(gps.time.hour(), gps.time.minute(), gps.time.second(), gps.date.day(), gps.date.month(), gps.date.year());
+          adjustTime(DST_OFFSET * SECS_PER_HOUR);
+          sun.setPosition(gps.location.lat(), gps.location.lng(), DST_OFFSET);
+          sun.setCurrentDate(year(), month(), day());
+        }
+        else {
+          Serial.print(F("INVALID"));
+          leds[0] = ERROR;
+          FastLED.show();
+        }
+      }
+    }
+  } while (timeStatus() == timeNotSet || year() < 2000);
+  
+  updateTime();
+
+  int now = hour() * 60 + minute();
+  int nextWake;
+
+  if (state == OPEN) {
+    nextWake = static_cast<int>(sun.calcSunrise());
+  }
+  else {
+    nextWake = static_cast<int>(sun.calcSunset());
+  }
+
+  state = !state;
+  setDoor(state);
+  EEPROM.write(0, state);
+  EEPROM.commit();
+
+  Serial.println("Going to sleep for " + String(nextWake - now) + " minutes");
+
+
+  int sleepTime = (nextWake - now) * 60; // sleep time in seconds
+
+  esp_sleep_enable_timer_wakeup(sleepTime * uS_TO_S_FACTOR);
 }
-
-
 
 void loop()
 {
-  //Serial.println(rtc.getTime("%A, %B %d %Y %H:%M:%S"));   // (String) returns time with specified format 
-//TODO: calculate sunrise and sunset 
-//TODO: update time
-  ESPAsync_WiFiManager->run();
-  check_status();
-
-  displayCredentialsInLoop();
-  if (!ESPAsync_WiFiManager->isConfigMode())
-    ElegantOTA.loop();  
-
-}
-
-
-void update_time()
-{  
-  if (WiFi.status() != WL_CONNECTED) {
-    Serial.print("Wifi not connected! Can't update time.");        // H means connected to WiFi
-    return;
-  }
-  Serial.println("Updating time...");
-  timeClient.update(); // get time from ntp
-  Serial.println(timeClient.getFormattedTime());
-  rtc.setTime(timeClient.getEpochTime(), 0); // set time to rtc
-  //rtc.setTime(30, 24, 15, 17, 1, 2021);  // 17th Jan 2021 15:24:30
-  Serial.println("Time updated");
 }
 
 void setupPins() {
+  //Stepper motor
   pinMode(STEP_PIN, OUTPUT);
   pinMode(DIR_PIN, OUTPUT);
   pinMode(ENABLE_PIN, OUTPUT);
-  pinMode(resetButtonPin, INPUT);
-  pinMode(neoPixelPin, OUTPUT);
+  pinMode(MICROSTEP_1, OUTPUT);
+  pinMode(MICROSTEP_2, OUTPUT);
+  pinMode(MICROSTEP_3, OUTPUT);
+  //Buttons
+  pinMode(UP_BUTTON_PIN, INPUT);
+  pinMode(DOWN_BUTTON_PIN, INPUT);
 
   digitalWrite(STEP_PIN, LOW);
   digitalWrite(DIR_PIN, LOW);
   digitalWrite(ENABLE_PIN, HIGH);
-  digitalWrite(neoPixelPin, LOW);
+  digitalWrite(MICROSTEP_1, LOW);
+  digitalWrite(MICROSTEP_2, LOW);
+  digitalWrite(MICROSTEP_3, LOW);
 }
 
 void setDoor(bool setState) {
@@ -141,75 +132,31 @@ void setDoor(bool setState) {
   state = setState;
 }
 
-void displayCredentialsInLoop()
-{
-  static bool displayedCredentials = false;
+void updateTime() {
+  digitalClockDisplay();
+  int sunrise = static_cast<int>(sun.calcSunrise());
+  int sunset = static_cast<int>(sun.calcSunset());  
+  char buffer[100];
+  sprintf(buffer, "Sunrise at %d:%dam, Sunset at %d:%dpm", sunrise / 60, sunrise % 60, sunset / 60, sunset % 60);
+  Serial.println(buffer);
 
-  if (!displayedCredentials)
-  {
-    for (int i = 0; i < NUM_MENU_ITEMS; i++)
-    {
-      if (!strlen(myMenuItems[i].pdata))
-      {
-        break;
-      }
-
-      if ( i == (NUM_MENU_ITEMS - 1) )
-      {
-        displayedCredentials = true;
-        displayCredentials();
-      }
-    }
-  }
 }
 
-void displayCredentials()
-{
-  Serial.println(F("\nYour stored Credentials :"));
-
-  for (uint16_t i = 0; i < NUM_MENU_ITEMS; i++)
-  {
-    Serial.print(myMenuItems[i].displayName);
-    Serial.print(F(" = "));
-    Serial.println(myMenuItems[i].pdata);
-  }
+void printDigits(int digits, char separator) {
+  // utility function for digital clock display: prints preceding colon and leading 0
+  Serial.print(separator);
+  if(digits < 10)
+    Serial.print('0');
+  Serial.print(digits);
 }
 
-void heartBeatPrint()
-{
-  static int num = 1;
-
-  if (WiFi.status() == WL_CONNECTED)
-    Serial.print("H");        // H means connected to WiFi
-  else
-  {
-    if (ESPAsync_WiFiManager->isConfigMode())
-      Serial.print("C");        // C means in Config Mode
-    else
-      Serial.print("F");        // F means not connected to WiFi
-  }
-
-  if (num == 80)
-  {
-    Serial.println();
-    num = 1;
-  }
-  else if (num++ % 10 == 0)
-  {
-    Serial.print(F(" "));
-  }
-}
-
-void check_status()
-{
-  static unsigned long checkstatus_timeout = 0;
-
-  //KH
-#define HEARTBEAT_INTERVAL    20000L
-  // Print hearbeat every HEARTBEAT_INTERVAL (20) seconds.
-  if ((millis() > checkstatus_timeout) || (checkstatus_timeout == 0))
-  {
-    heartBeatPrint();
-    checkstatus_timeout = millis() + HEARTBEAT_INTERVAL;
-  }
+void digitalClockDisplay() {
+  // digital clock display of the time
+  Serial.print(hour());
+  printDigits(minute(), ':');
+  printDigits(second(), ':');
+  printDigits(day(), ' ');
+  printDigits(month(), '.');
+  printDigits(year(), '.');
+  Serial.println(); 
 }
