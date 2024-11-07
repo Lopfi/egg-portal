@@ -123,7 +123,6 @@ void setupPins() {
   digitalWrite(STEP_PIN, LOW);
   digitalWrite(DIR_PIN, LOW);
   digitalWrite(ENABLE_PIN, HIGH);
-  digitalWrite(neoPixelPin, LOW);
 }
 
 void setDoor(bool setState) {
