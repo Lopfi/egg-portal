@@ -2,9 +2,12 @@
 // Stepper motor configuration
 
 /* PINS */
-#define STEP_PIN 2
-#define DIR_PIN 3
-#define ENABLE_PIN 4
+#define STEP_PIN 36
+#define DIR_PIN 35
+#define ENABLE_PIN 41
+#define MICROSTEP_1 40
+#define MICROSTEP_2 39
+#define MICROSTEP_3 38
 
 #define MICROSTEPPING 1
 #define STEPS_PER_REV 200
@@ -15,35 +18,32 @@
 #define STEPPER_ENABLED false
 #define STEPPER_DISABLED true
 
-/* RESET BUTTON */
-#define resetButtonPin 5
-
 /* NEOPIXEL */
-#define neoPixelPin 6
-#define neoPixelCount 1
+#define LED_PIN 2
+#define PIXEL_COUNT 1
+
+#define BRIGHTNESS 5
+#define BOOTING CRGB::Yellow
+#define SUCCESS CRGB::Green
+#define ERROR CRGB::Red
+
 
 /* BUTTONS */
-#define upButtonPin 7
-#define downButtonPin 8
-#define singleButton false
+#define UP_BUTTON_PIN 7
+#define DOWN_BUTTON_PIN 8
+#define SINGLE_BUTTON false
 
 #define OPEN true
 #define CLOSED false
 
-//////////////////////////////
-/// Double Reset Detector ///
-//////////////////////////////
+/* TIME */
+#define LATITUDE        48.1238978
+#define LONGITUDE       11.5826488
+#define DST_OFFSET      2
 
-// Number of seconds after reset during which a
-// subseqent reset will be considered a double reset.
-#define DRD_TIMEOUT 10
+/* GPS */
+#define RXD2 44
+#define TXD2 43
 
-// RTC Memory Address for the DoubleResetDetector to use
-#define DRD_ADDRESS 0
-
-// To not display stored SSIDs and PWDs on Config Portal, select false. Default is true
-// Even the stored Credentials are not display, just leave them all blank to reconnect and reuse the stored Credentials 
-//#define DISPLAY_STORED_CREDENTIALS_IN_CP        false
-
-// Use from 0 to 4. Higher number, more debugging messages and memory usage.
-#define _ESPASYNC_WIFIMGR_LOGLEVEL_    4
+#define EEPROM_SIZE 1
+#define uS_TO_S_FACTOR 1000000  /* Conversion factor for micro seconds to seconds */
